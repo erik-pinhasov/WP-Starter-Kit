@@ -1,0 +1,83 @@
+msgid ""
+msgstr ""
+"Language: he_IL\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=4; plural=(n==1 ? 0 : n==2 ? 1 : n>10 && n%10==0 ? 2 : 3);\n"
+
+msgid "Media Organizer"
+msgstr "ארגון מדיה"
+
+msgid "Organize your media library into folders with filtering and bulk actions."
+msgstr "ארגן את ספריית המדיה שלך בתיקיות עם סינון ופעולות מרובות."
+
+msgid "Auto-Assign Uploads"
+msgstr "שייך העלאות אוטומטית"
+
+msgid "Automatically place new uploads into the user's selected default folder."
+msgstr "שייך העלאות חדשות אוטומטית לתיקיית ברירת המחדל של המשתמש."
+
+msgid "Bulk Download"
+msgstr "הורדה מרובה"
+
+msgid "Allow downloading selected media files as a ZIP archive."
+msgstr "אפשר הורדת קבצי מדיה נבחרים כארכיון ZIP."
+
+msgid "Media Folders"
+msgstr "תיקיות מדיה"
+
+msgid "Folder"
+msgstr "תיקייה"
+
+msgid "Search Folders"
+msgstr "חיפוש תיקיות"
+
+msgid "All Folders"
+msgstr "כל התיקיות"
+
+msgid "Parent Folder"
+msgstr "תיקיית אב"
+
+msgid "Edit Folder"
+msgstr "עריכת תיקייה"
+
+msgid "Update Folder"
+msgstr "עדכון תיקייה"
+
+msgid "Add New Folder"
+msgstr "הוסף תיקייה חדשה"
+
+msgid "New Folder Name"
+msgstr "שם תיקייה חדש"
+
+msgid "Folders"
+msgstr "תיקיות"
+
+msgid "No folders found"
+msgstr "לא נמצאו תיקיות"
+
+msgid "— No folder —"
+msgstr "— ללא תיקייה —"
+
+msgid "— None —"
+msgstr "— ללא —"
+
+msgid "No Folder"
+msgstr "ללא תיקייה"
+
+msgid "Upload to folder:"
+msgstr "העלאה לתיקייה:"
+
+msgid "Move to: %s"
+msgstr "העבר אל: %s"
+
+msgid "Remove from folder"
+msgstr "הסר מתיקייה"
+
+msgid "Download as ZIP"
+msgstr "הורד כ-ZIP"
+
+msgid "%d files moved successfully."
+msgstr "%d קבצים הועברו בהצלחה."
+
+msgid "WP Starter Kit: Media Organizer — the suite plugin is active, so this standalone version has been skipped. You can safely deactivate it."
+msgstr "WP Starter Kit: ארגון מדיה — תוסף הערכה פעיל, לכן הגרסה העצמאית דולגה."

@@ -1,0 +1,99 @@
+# WP Starter Kit: Turnstile — Hebrew Translation
+# Copyright (C) 2026
+# This file is distributed under the GPL-2.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: WPSK Turnstile 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-05-01 00:00+0000\n"
+"PO-Revision-Date: 2026-05-01 00:00+0300\n"
+"Last-Translator: \n"
+"Language-Team: Hebrew\n"
+"Language: he_IL\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n==1 ? 0 : n==2 ? 1 : n>10 && n%10==0 ? 2 : 3);\n"
+"X-Generator: manual\n"
+
+#: modules/turnstile/class-wpsk-turnstile.php — Module identity
+msgid "Cloudflare Turnstile"
+msgstr "Cloudflare Turnstile"
+
+msgid "Protect login, registration, checkout, and other forms with Cloudflare Turnstile CAPTCHA."
+msgstr "הגן על טפסי התחברות, הרשמה, תשלום ועוד באמצעות Cloudflare Turnstile CAPTCHA."
+
+#: Settings fields
+msgid "Site Key"
+msgstr "מפתח אתר"
+
+msgid "Your Cloudflare Turnstile site key. Get it from the Cloudflare dashboard → Turnstile."
+msgstr "מפתח האתר של Cloudflare Turnstile. ניתן לקבלו מלוח הבקרה של Cloudflare → Turnstile."
+
+msgid "Secret Key"
+msgstr "מפתח סודי"
+
+msgid "Your Cloudflare Turnstile secret key. Never share this publicly."
+msgstr "המפתח הסודי של Cloudflare Turnstile. אין לשתף אותו בפומבי."
+
+msgid "Widget Theme"
+msgstr "עיצוב הווידג׳ט"
+
+msgid "Appearance of the Turnstile widget."
+msgstr "מראה הווידג׳ט של Turnstile."
+
+msgid "Auto (match system)"
+msgstr "אוטומטי (לפי המערכת)"
+
+msgid "Light"
+msgstr "בהיר"
+
+msgid "Dark"
+msgstr "כהה"
+
+msgid "Protected Forms"
+msgstr "טפסים מוגנים"
+
+msgid "WordPress Login"
+msgstr "התחברות WordPress"
+
+msgid "WordPress Registration"
+msgstr "הרשמה ל-WordPress"
+
+msgid "WordPress Lost Password"
+msgstr "שחזור סיסמה WordPress"
+
+msgid "WooCommerce Login"
+msgstr "התחברות WooCommerce"
+
+msgid "WooCommerce Registration"
+msgstr "הרשמה ל-WooCommerce"
+
+msgid "WooCommerce Checkout"
+msgstr "תשלום WooCommerce"
+
+msgid "WooCommerce Pay for Order"
+msgstr "תשלום עבור הזמנה"
+
+msgid "Error Message"
+msgstr "הודעת שגיאה"
+
+msgid "Message shown when verification fails. Leave empty for the default."
+msgstr "ההודעה שתוצג כאשר האימות נכשל. השאר ריק לברירת המחדל."
+
+msgid "Security verification failed. Please try again."
+msgstr "אימות אבטחה נכשל. אנא נסה שנית."
+
+#: Admin notices
+msgid "Cloudflare Turnstile: site key and secret key are required."
+msgstr "Cloudflare Turnstile: נדרשים מפתח אתר ומפתח סודי."
+
+msgid "Configure now →"
+msgstr "הגדר עכשיו →"
+
+msgid "Error:"
+msgstr "שגיאה:"
+
+#: Standalone conflict notice
+msgid "WP Starter Kit: Turnstile — the suite plugin is active, so this standalone version has been skipped. You can safely deactivate it."
+msgstr "WP Starter Kit: Turnstile — תוסף הערכה פעיל, לכן הגרסה העצמאית דולגה. ניתן לבטל את הפעלתו בבטחה."

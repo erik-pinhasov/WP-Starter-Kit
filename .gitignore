@@ -1,0 +1,27 @@
+# Build output
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# WordPress (if testing locally)
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+wp-content/litespeed/
+
+# Compiled translations are committed (so users can install from source),
+# but regenerated on build. Uncomment the next line if you prefer
+# to only distribute .mo files via releases:
+# *.mo
+
+# Node (if you add a JS build step later)
+node_modules/
+package-lock.json

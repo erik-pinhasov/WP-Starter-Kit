@@ -1,0 +1,96 @@
+# WP Starter Kit: Performance Cleanup — Hebrew Translation
+# Copyright (C) 2026
+# This file is distributed under the GPL-2.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: WPSK Performance 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-05-01 00:00+0000\n"
+"PO-Revision-Date: 2026-05-01 00:00+0300\n"
+"Last-Translator: \n"
+"Language-Team: Hebrew\n"
+"Language: he_IL\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n==1 ? 0 : n==2 ? 1 : n>10 && n%10==0 ? 2 : 3);\n"
+"X-Generator: manual\n"
+
+#: Module identity
+msgid "Performance Cleanup"
+msgstr "ניקוי ביצועים"
+
+msgid "Remove unused WordPress scripts, styles, and meta tags to improve page load speed."
+msgstr "הסר סקריפטים, סגנונות ותגיות מטא שאינם בשימוש כדי לשפר את מהירות טעינת העמוד."
+
+#: Head cleanup
+msgid "Head Cleanup"
+msgstr "ניקוי Head"
+
+msgid "Remove shortlink tag"
+msgstr "הסר תגית shortlink"
+
+msgid "Remove adjacent posts (prev/next) link tags"
+msgstr "הסר תגיות קישור לפוסטים סמוכים (הקודם/הבא)"
+
+msgid "Remove REST API discovery link"
+msgstr "הסר קישור גילוי REST API"
+
+msgid "Remove oEmbed discovery links"
+msgstr "הסר קישורי גילוי oEmbed"
+
+#: Asset cleanup
+msgid "Asset Cleanup"
+msgstr "ניקוי נכסים"
+
+msgid "Remove emoji scripts and styles"
+msgstr "הסר סקריפטים וסגנונות אמוג׳י"
+
+msgid "Remove wp-embed script (oEmbed for others to embed your posts)"
+msgstr "הסר סקריפט wp-embed (מאפשר לאחרים להטמיע את הפוסטים שלך)"
+
+msgid "Remove classic-theme-styles (unused by modern themes)"
+msgstr "הסר classic-theme-styles (לא בשימוש בתבניות מודרניות)"
+
+msgid "Strip external Google Fonts stylesheets (use self-hosted fonts instead)"
+msgstr "הסר גיליונות סגנון של Google Fonts חיצוניים (השתמש בגופנים מאוחסנים מקומית)"
+
+msgid "Remove jQuery Migrate — caution: may break older plugins/themes"
+msgstr "הסר jQuery Migrate — זהירות: עלול לשבור תוספים/תבניות ישנים"
+
+#: WooCommerce
+msgid "WooCommerce"
+msgstr "WooCommerce"
+
+msgid "Block speculation/prefetch on cart, checkout, and account pages"
+msgstr "חסום speculation/prefetch בעמודי עגלה, תשלום וחשבון"
+
+msgid "Only visible when WooCommerce is active."
+msgstr "רלוונטי רק כאשר WooCommerce פעיל."
+
+#: Heartbeat
+msgid "Heartbeat API"
+msgstr "Heartbeat API"
+
+msgid "Default (every 15-60 seconds)"
+msgstr "ברירת מחדל (כל 15-60 שניות)"
+
+msgid "Slow down (every 120 seconds)"
+msgstr "האט (כל 120 שניות)"
+
+msgid "Disable everywhere except post editor"
+msgstr "השבת בכל מקום חוץ מעורך הפוסטים"
+
+msgid "The Heartbeat API handles auto-save and real-time features. Slowing or disabling it reduces admin AJAX requests."
+msgstr "Heartbeat API מטפל בשמירה אוטומטית ותכונות בזמן אמת. האטה או השבתה מפחיתה בקשות AJAX בממשק הניהול."
+
+#: Revisions
+msgid "Limit Post Revisions"
+msgstr "הגבל גרסאות פוסט"
+
+msgid "Maximum number of post revisions to keep. 0 = use WordPress default (unlimited). Set to 5-10 to save database space."
+msgstr "מספר מרבי של גרסאות פוסט לשמירה. 0 = ברירת מחדל של WordPress (ללא הגבלה). הגדר 5-10 לחיסכון בשטח מסד נתונים."
+
+#: Standalone conflict
+msgid "WP Starter Kit: Performance Cleanup — the suite plugin is active, so this standalone version has been skipped. You can safely deactivate it."
+msgstr "WP Starter Kit: Performance Cleanup — תוסף הערכה פעיל, לכן הגרסה העצמאית דולגה. ניתן לבטל את הפעלתו בבטחה."

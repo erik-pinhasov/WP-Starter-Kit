@@ -1,0 +1,44 @@
+msgid ""
+msgstr ""
+"Language: he_IL\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=4; plural=(n==1 ? 0 : n==2 ? 1 : n>10 && n%10==0 ? 2 : 3);\n"
+
+msgid "Custom Login URL"
+msgstr "כתובת התחברות מותאמת"
+
+msgid "Hide wp-login.php behind a custom URL to reduce brute-force attacks."
+msgstr "הסתר את wp-login.php מאחורי כתובת מותאמת כדי להפחית התקפות brute-force."
+
+msgid "Login Slug"
+msgstr "סלאג התחברות"
+
+msgid "Your custom login URL will be: %s"
+msgstr "כתובת ההתחברות המותאמת שלך תהיה: %s"
+
+msgid "Redirect Blocked Attempts To"
+msgstr "הפנה ניסיונות חסומים אל"
+
+msgid "404 Not Found page"
+msgstr "דף 404 לא נמצא"
+
+msgid "Homepage"
+msgstr "דף הבית"
+
+msgid "Where to send visitors who try to access wp-login.php directly."
+msgstr "לאן להפנות מבקרים שמנסים לגשת ישירות ל-wp-login.php."
+
+msgid "Your login URL:"
+msgstr "כתובת ההתחברות שלך:"
+
+msgid "Recovery"
+msgstr "שחזור"
+
+msgid "If you forget your custom login URL, reset via WP-CLI or database:"
+msgstr "אם שכחת את כתובת ההתחברות המותאמת, אפס דרך WP-CLI או מסד הנתונים:"
+
+msgid "Not Found"
+msgstr "לא נמצא"
+
+msgid "WP Starter Kit: Custom Login URL — the suite plugin is active, so this standalone version has been skipped. You can safely deactivate it."
+msgstr "WP Starter Kit: כתובת התחברות — תוסף הערכה פעיל, לכן הגרסה העצמאית דולגה."

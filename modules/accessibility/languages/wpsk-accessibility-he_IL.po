@@ -1,0 +1,110 @@
+msgid ""
+msgstr ""
+"Language: he_IL\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=4; plural=(n==1 ? 0 : n==2 ? 1 : n>10 && n%10==0 ? 2 : 3);\n"
+
+msgid "Accessibility Toolbar"
+msgstr "סרגל נגישות"
+
+msgid "Add a frontend accessibility toolbar with font scaling, contrast modes, and keyboard navigation aids."
+msgstr "הוסף סרגל נגישות עם שינוי גודל גופן, מצבי ניגודיות ועזרי ניווט במקלדת."
+
+msgid "Toolbar Features"
+msgstr "תכונות הסרגל"
+
+msgid "Font size controls (zoom in/out)"
+msgstr "בקרות גודל גופן (הגדלה/הקטנה)"
+
+msgid "Readable font (switch to Arial/sans-serif)"
+msgstr "גופן קריא (מעבר ל-Arial)"
+
+msgid "High contrast mode"
+msgstr "מצב ניגודיות גבוהה"
+
+msgid "Greyscale mode"
+msgstr "מצב גווני אפור"
+
+msgid "Underline all links"
+msgstr "קו תחתון בכל הקישורים"
+
+msgid "Highlight links with yellow background"
+msgstr "הדגשת קישורים ברקע צהוב"
+
+msgid "Enhanced keyboard focus indicator"
+msgstr "מחוון פוקוס מקלדת מוגבר"
+
+msgid "Stop animations"
+msgstr "עצירת אנימציות"
+
+msgid "Toolbar Position"
+msgstr "מיקום הסרגל"
+
+msgid "Bottom left"
+msgstr "שמאל למטה"
+
+msgid "Bottom right"
+msgstr "ימין למטה"
+
+msgid "Top left"
+msgstr "שמאל למעלה"
+
+msgid "Top right"
+msgstr "ימין למעלה"
+
+msgid "Accessibility Statement URL"
+msgstr "כתובת הצהרת נגישות"
+
+msgid "Link to your accessibility statement page. Leave empty to hide the link."
+msgstr "קישור לדף הצהרת הנגישות שלך. השאר ריק להסתרת הקישור."
+
+msgid "Toggle Button Color"
+msgstr "צבע כפתור הפעלה"
+
+msgid "CSS color for the toolbar toggle button background. Default: #0056b3"
+msgstr "צבע CSS לרקע כפתור ההפעלה. ברירת מחדל: #0056b3"
+
+msgid "Open accessibility menu"
+msgstr "פתיחת תפריט נגישות"
+
+msgid "Close accessibility menu"
+msgstr "סגירת תפריט נגישות"
+
+msgid "Accessibility Menu"
+msgstr "תפריט נגישות"
+
+msgid "Increase text"
+msgstr "הגדל טקסט"
+
+msgid "Decrease text"
+msgstr "הקטן טקסט"
+
+msgid "Readable font"
+msgstr "גופן קריא"
+
+msgid "High contrast"
+msgstr "ניגודיות גבוהה"
+
+msgid "Greyscale"
+msgstr "גווני אפור"
+
+msgid "Underline links"
+msgstr "קו תחתון בקישורים"
+
+msgid "Highlight links"
+msgstr "הדגשת קישורים"
+
+msgid "Keyboard focus"
+msgstr "פוקוס מקלדת"
+
+msgid "Reset settings"
+msgstr "איפוס הגדרות"
+
+msgid "Accessibility statement"
+msgstr "הצהרת נגישות"
+
+msgid "Skip to main content"
+msgstr "דילוג לתוכן המרכזי"
+
+msgid "WP Starter Kit: Accessibility — the suite plugin is active, so this standalone version has been skipped. You can safely deactivate it."
+msgstr "WP Starter Kit: נגישות — תוסף הערכה פעיל, לכן הגרסה העצמאית דולגה."

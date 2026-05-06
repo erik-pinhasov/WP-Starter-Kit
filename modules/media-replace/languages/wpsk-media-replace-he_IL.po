@@ -1,0 +1,77 @@
+msgid ""
+msgstr ""
+"Language: he_IL\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=4; plural=(n==1 ? 0 : n==2 ? 1 : n>10 && n%10==0 ? 2 : 3);\n"
+
+msgid "Media Replace"
+msgstr "החלפת מדיה"
+
+msgid "Replace media files in-place — keep the same URL, ID, and references."
+msgstr "החלף קבצי מדיה במקום — שמור על אותו URL, מזהה והפניות."
+
+msgid "Update Database URLs"
+msgstr "עדכן כתובות במסד נתונים"
+
+msgid "When the file extension changes, search & replace old URLs in posts and post meta."
+msgstr "כאשר סיומת הקובץ משתנה, חפש והחלף כתובות ישנות בפוסטים ובמטא-נתונים."
+
+msgid "Replace File"
+msgstr "החלף קובץ"
+
+msgid "Replace Media File"
+msgstr "החלפת קובץ מדיה"
+
+msgid "Current file:"
+msgstr "קובץ נוכחי:"
+
+msgid "Filename:"
+msgstr "שם קובץ:"
+
+msgid "Type:"
+msgstr "סוג:"
+
+msgid "Date:"
+msgstr "תאריך:"
+
+msgid "Size:"
+msgstr "גודל:"
+
+msgid "Drag file here"
+msgstr "גרור קובץ לכאן"
+
+msgid "or"
+msgstr "או"
+
+msgid "Choose File"
+msgstr "בחר קובץ"
+
+msgid "Choose different file"
+msgstr "בחר קובץ אחר"
+
+msgid "Back to attachment"
+msgstr "חזרה לצרופה"
+
+msgid "Media Library"
+msgstr "ספריית מדיה"
+
+msgid "Permission denied."
+msgstr "אין הרשאה."
+
+msgid "Missing attachment ID."
+msgstr "מזהה צרופה חסר."
+
+msgid "Attachment not found."
+msgstr "צרופה לא נמצאה."
+
+msgid "Upload error."
+msgstr "שגיאה בהעלאה."
+
+msgid "File type not allowed."
+msgstr "סוג קובץ לא מורשה."
+
+msgid "Could not save file."
+msgstr "לא ניתן לשמור את הקובץ."
+
+msgid "WP Starter Kit: Media Replace — the suite plugin is active, so this standalone version has been skipped. You can safely deactivate it."
+msgstr "WP Starter Kit: החלפת מדיה — תוסף הערכה פעיל, לכן הגרסה העצמאית דולגה."
