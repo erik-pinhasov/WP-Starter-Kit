@@ -2,14 +2,11 @@
 /**
  * WPSK Media Organizer — Folder-based media library management.
  *
- * @package    WPStarterKit
- * @subpackage Modules\MediaOrganizer
- * @since      1.0.0
+ * Fix: Folder media counts now include all descendants (recursive),
+ * not just direct children.
  */
 
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
+if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class WPSK_Media_Organizer extends WPSK_Module {
 
@@ -34,338 +31,377 @@ class WPSK_Media_Organizer extends WPSK_Module {
 				'description' => __( 'Automatically place new uploads into the user\'s selected default folder.', 'wpsk-media-organizer' ),
 				'default'     => '1',
 			],
-			[
-				'id'          => 'bulk_download',
-				'label'       => __( 'Bulk Download', 'wpsk-media-organizer' ),
-				'type'        => 'checkbox',
-				'description' => __( 'Allow downloading selected media files as a ZIP archive.', 'wpsk-media-organizer' ),
-				'default'     => '1',
-			],
 		];
 	}
 
 	protected function init(): void {
+		// Register taxonomy.
 		add_action( 'init', [ $this, 'register_taxonomy' ] );
-		add_filter( 'parent_file', [ $this, 'fix_admin_menu' ] );
 
-		add_filter( 'attachment_fields_to_edit', [ $this, 'add_folder_field' ], 10, 2 );
-		add_filter( 'attachment_fields_to_save', [ $this, 'save_folder_field' ], 10, 2 );
+		// Admin UI.
+		add_action( 'admin_init', [ $this, 'admin_init' ] );
+		add_action( 'restrict_manage_posts', [ $this, 'add_filter_dropdown' ] );
 
+		// AJAX handlers.
 		add_action( 'wp_ajax_wpsk_assign_folder', [ $this, 'ajax_assign_folder' ] );
-		add_action( 'wp_ajax_wpsk_set_upload_folder', [ $this, 'ajax_set_upload_folder' ] );
+		add_action( 'wp_ajax_wpsk_create_folder', [ $this, 'ajax_create_folder' ] );
+		add_action( 'wp_ajax_wpsk_delete_folder', [ $this, 'ajax_delete_folder' ] );
+		add_action( 'wp_ajax_wpsk_rename_folder', [ $this, 'ajax_rename_folder' ] );
 
+		// Auto-assign on upload.
 		if ( '1' === $this->get_option( 'auto_assign' ) ) {
-			add_action( 'add_attachment', [ $this, 'auto_assign_folder' ] );
+			add_action( 'add_attachment', [ $this, 'auto_assign' ] );
 		}
 
-		add_filter( 'media_row_actions', [ $this, 'add_quick_assign' ], 10, 2 );
-		add_action( 'restrict_manage_posts', [ $this, 'add_filter_dropdown' ] );
-		add_action( 'pre_get_posts', [ $this, 'filter_by_folder' ] );
+		// Add folder column to media list.
+		add_filter( 'manage_media_columns', [ $this, 'add_folder_column' ] );
+		add_action( 'manage_media_custom_column', [ $this, 'render_folder_column' ], 10, 2 );
 
-		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_scripts' ] );
-		add_action( 'wp_enqueue_media', [ $this, 'enqueue_grid_scripts' ] );
-		add_filter( 'ajax_query_attachments_args', [ $this, 'grid_filter' ] );
-
-		add_filter( 'bulk_actions-upload', [ $this, 'register_bulk_actions' ] );
-		add_filter( 'handle_bulk_actions-upload', [ $this, 'handle_bulk_actions' ], 10, 3 );
-		add_action( 'admin_notices', [ $this, 'bulk_notice' ] );
-
-		add_action( 'post-upload-ui', [ $this, 'upload_folder_selector' ] );
+		// Quick-assign dropdown in attachment edit.
+		add_action( 'attachment_submitbox_misc_actions', [ $this, 'render_quick_assign' ] );
 	}
 
-	/* ── Taxonomy ────────────────────────────────────────────── */
+	/* ── Taxonomy ───────────────────────────────────────────── */
 
 	public function register_taxonomy(): void {
 		register_taxonomy( 'media_folder', 'attachment', [
-			'hierarchical'          => true,
-			'update_count_callback' => '_update_generic_term_count',
-			'labels'                => [
-				'name'          => __( 'Media Folders', 'wpsk-media-organizer' ),
-				'singular_name' => __( 'Folder', 'wpsk-media-organizer' ),
-				'search_items'  => __( 'Search Folders', 'wpsk-media-organizer' ),
-				'all_items'     => __( 'All Folders', 'wpsk-media-organizer' ),
-				'parent_item'   => __( 'Parent Folder', 'wpsk-media-organizer' ),
-				'edit_item'     => __( 'Edit Folder', 'wpsk-media-organizer' ),
-				'update_item'   => __( 'Update Folder', 'wpsk-media-organizer' ),
-				'add_new_item'  => __( 'Add New Folder', 'wpsk-media-organizer' ),
-				'new_item_name' => __( 'New Folder Name', 'wpsk-media-organizer' ),
-				'menu_name'     => __( 'Folders', 'wpsk-media-organizer' ),
-				'not_found'     => __( 'No folders found', 'wpsk-media-organizer' ),
-			],
-			'show_ui'            => true,
-			'show_admin_column'  => true,
-			'show_in_rest'       => true,
-			'show_in_quick_edit' => true,
-			'query_var'          => false,
-			'public'             => false,
-			'rewrite'            => false,
+			'label'             => __( 'Folders', 'wpsk-media-organizer' ),
+			'hierarchical'      => true,
+			'show_ui'           => true,
+			'show_admin_column' => false,
+			'show_in_rest'      => true,
+			'query_var'         => true,
+			'rewrite'           => false,
+			'public'            => false,
 		] );
 	}
 
-	public function fix_admin_menu( string $parent ): string {
-		global $current_screen;
-		if ( $current_screen && 'media_folder' === ( $current_screen->taxonomy ?? '' ) ) {
-			return 'upload.php';
+	/* ── Admin UI ───────────────────────────────────────────── */
+
+	public function admin_init(): void {
+		// Add sidebar panel to media library.
+		add_action( 'admin_footer-upload.php', [ $this, 'render_sidebar_panel' ] );
+	}
+
+	public function add_filter_dropdown(): void {
+		$screen = get_current_screen();
+		if ( ! $screen || 'upload' !== $screen->id ) {
+			return;
 		}
-		return $parent;
-	}
 
-	/* ── Attachment edit sidebar ─────────────────────────────── */
+		$folders  = $this->get_folders();
+		$selected = $_GET['media_folder'] ?? '';
 
-	public function add_folder_field( array $fields, \WP_Post $post ): array {
-		$terms = $this->get_folders();
-		if ( empty( $terms ) ) { return $fields; }
-		$current = wp_get_object_terms( $post->ID, 'media_folder', [ 'fields' => 'ids' ] );
-		$cur_id  = ! empty( $current ) ? (int) $current[0] : 0;
+		echo '<select name="media_folder" style="max-width:200px">';
+		echo '<option value="">' . esc_html__( 'All Folders', 'wpsk-media-organizer' ) . '</option>';
+		echo '<option value="__uncategorized"' . selected( $selected, '__uncategorized', false ) . '>' . esc_html__( 'Uncategorized', 'wpsk-media-organizer' ) . '</option>';
 
-		$html = '<select name="attachments[' . $post->ID . '][media_folder]" style="width:100%">';
-		$html .= '<option value="0">' . esc_html__( '— No folder —', 'wpsk-media-organizer' ) . '</option>';
-		foreach ( $terms as $t ) {
-			$html .= sprintf( '<option value="%d"%s>%s</option>', $t->term_id, selected( $t->term_id, $cur_id, false ), esc_html( $t->name ) );
-		}
-		$html .= '</select>';
-
-		$fields['media_folder'] = [
-			'label' => __( 'Folder', 'wpsk-media-organizer' ),
-			'input' => 'html',
-			'html'  => $html,
-		];
-		return $fields;
-	}
-
-	public function save_folder_field( array $post, array $att ): array {
-		if ( isset( $att['media_folder'] ) ) {
-			$id = absint( $att['media_folder'] );
-			wp_set_object_terms( $post['ID'], $id > 0 ? [ $id ] : [], 'media_folder' );
-		}
-		return $post;
-	}
-
-	/* ── AJAX ────────────────────────────────────────────────── */
-
-	public function ajax_assign_folder(): void {
-		check_ajax_referer( 'wpsk_media_folder', 'nonce' );
-		if ( ! current_user_can( 'upload_files' ) ) { wp_send_json_error(); }
-		$att = absint( $_POST['attachment_id'] ?? 0 );
-		$fid = absint( $_POST['folder_id'] ?? 0 );
-		if ( ! $att || 'attachment' !== get_post_type( $att ) ) { wp_send_json_error(); }
-		wp_set_object_terms( $att, $fid > 0 ? [ $fid ] : [], 'media_folder' );
-		wp_send_json_success();
-	}
-
-	public function ajax_set_upload_folder(): void {
-		check_ajax_referer( 'wpsk_media_folder', 'nonce' );
-		if ( ! current_user_can( 'upload_files' ) ) { wp_send_json_error(); }
-		update_user_meta( get_current_user_id(), '_wpsk_upload_folder', absint( $_POST['folder_id'] ?? 0 ) );
-		wp_send_json_success();
-	}
-
-	public function auto_assign_folder( int $id ): void {
-		$folder = (int) get_user_meta( get_current_user_id(), '_wpsk_upload_folder', true );
-		if ( $folder > 0 && term_exists( $folder, 'media_folder' ) ) {
-			wp_set_object_terms( $id, [ $folder ], 'media_folder' );
-		}
-	}
-
-	/* ── List view ───────────────────────────────────────────── */
-
-	public function add_quick_assign( array $actions, \WP_Post $post ): array {
-		if ( ! current_user_can( 'upload_files' ) ) { return $actions; }
-		$terms = $this->get_folders();
-		if ( empty( $terms ) ) { return $actions; }
-
-		$cur    = wp_get_object_terms( $post->ID, 'media_folder', [ 'fields' => 'ids' ] );
-		$cur_id = ! empty( $cur ) ? (int) $cur[0] : 0;
-
-		$opts = '<option value="0">' . esc_html__( '— None —', 'wpsk-media-organizer' ) . '</option>';
-		foreach ( $terms as $t ) {
-			$opts .= '<option value="' . $t->term_id . '"' . selected( $t->term_id, $cur_id, false ) . '>' . esc_html( $t->name ) . '</option>';
-		}
-		$actions['wpsk_folder'] = '<span class="wpsk-qf"><a href="#" class="wpsk-qf-toggle">' . esc_html__( 'Folder', 'wpsk-media-organizer' ) . ' ▾</a><span class="wpsk-qf-dd" style="display:none"><select class="wpsk-qf-sel" data-att="' . $post->ID . '">' . $opts . '</select><span class="wpsk-qf-ok" style="display:none;color:#00a32a;margin-inline-start:4px">✓</span></span></span>';
-		return $actions;
-	}
-
-	public function add_filter_dropdown( string $post_type ): void {
-		if ( 'attachment' !== $post_type ) { return; }
-		$terms    = $this->get_folders();
-		$selected = sanitize_text_field( $_GET['media_folder'] ?? '' );
-		$total    = (int) wp_count_posts( 'attachment' )->inherit;
-
-		echo '<select name="media_folder" id="wpsk-folder-filter">';
-		printf( '<option value="">%s (%d)</option>', esc_html__( 'All Folders', 'wpsk-media-organizer' ), $total );
-		foreach ( $terms as $t ) {
-			printf( '<option value="%s"%s>%s (%d)</option>', esc_attr( $t->slug ), selected( $t->slug, $selected, false ), esc_html( $t->name ), $t->count );
+		foreach ( $folders as $folder ) {
+			$indent = str_repeat( '—', $this->get_term_depth( $folder ) );
+			$count  = $this->get_recursive_count( $folder->term_id );
+			echo '<option value="' . esc_attr( $folder->slug ) . '"' . selected( $selected, $folder->slug, false ) . '>'
+				. esc_html( $indent . ' ' . $folder->name . ' (' . $count . ')' )
+				. '</option>';
 		}
 		echo '</select>';
 	}
 
-	public function filter_by_folder( \WP_Query $q ): void {
-		if ( ! is_admin() || ! $q->is_main_query() || 'attachment' !== $q->get( 'post_type' ) ) { return; }
-		$folder = sanitize_text_field( $_GET['media_folder'] ?? '' );
-		if ( '' === $folder ) { return; }
-		$q->set( 'tax_query', [ [ 'taxonomy' => 'media_folder', 'field' => 'slug', 'terms' => $folder ] ] );
-	}
+	/**
+	 * FIX: Get the total media count for a folder INCLUDING all subfolders.
+	 * The default term->count only counts direct children.
+	 */
+	private function get_recursive_count( int $term_id ): int {
+		$term_ids = [ $term_id ];
 
-	/* ── Grid view ───────────────────────────────────────────── */
-
-	public function enqueue_admin_scripts( string $hook ): void {
-		if ( 'upload.php' === $hook ) {
-			$this->enqueue_grid_scripts();
-			$this->enqueue_list_js();
+		// Get all descendant term IDs.
+		$children = get_term_children( $term_id, 'media_folder' );
+		if ( ! is_wp_error( $children ) ) {
+			$term_ids = array_merge( $term_ids, $children );
 		}
+
+		// Count attachments in all these terms.
+		$query = new \WP_Query( [
+			'post_type'      => 'attachment',
+			'post_status'    => 'inherit',
+			'posts_per_page' => -1,
+			'no_found_rows'  => true,
+			'fields'         => 'ids',
+			'tax_query'      => [
+				[
+					'taxonomy' => 'media_folder',
+					'terms'    => $term_ids,
+					'field'    => 'term_id',
+					'operator' => 'IN',
+				],
+			],
+		] );
+
+		return $query->post_count;
 	}
 
-	public function enqueue_grid_scripts(): void {
-		static $done = false;
-		if ( $done ) { return; }
-		$done = true;
-
-		$terms   = $this->get_folders();
-		$options = [];
-		foreach ( $terms as $t ) {
-			$options[] = [ 'id' => $t->term_id, 'text' => $t->name, 'parent' => $t->parent, 'count' => $t->count ];
+	private function get_term_depth( $term ): int {
+		$depth = 0;
+		while ( $term->parent ) {
+			$depth++;
+			$term = get_term( $term->parent, 'media_folder' );
+			if ( ! $term || is_wp_error( $term ) ) break;
 		}
-		$cur_folder  = (int) get_user_meta( get_current_user_id(), '_wpsk_upload_folder', true );
-		$nonce       = wp_create_nonce( 'wpsk_media_folder' );
-		$total       = (int) wp_count_posts( 'attachment' )->inherit;
-		$all_label   = esc_js( __( 'All Folders', 'wpsk-media-organizer' ) );
-		$none_label  = esc_js( __( 'No Folder', 'wpsk-media-organizer' ) );
-		$upl_label   = esc_js( __( 'Upload to folder:', 'wpsk-media-organizer' ) );
-		$none_opt    = esc_js( __( '— None —', 'wpsk-media-organizer' ) );
-		$json        = wp_json_encode( $options, JSON_UNESCAPED_UNICODE );
-
-		$js = <<<JS
-(function(){
-if(typeof wp==="undefined"||!wp.media||!wp.media.view)return;
-var f={$json},n="{$nonce}",uf={$cur_folder},tc={$total};
-var O=wp.media.view.AttachmentFilters.All;
-wp.media.view.AttachmentFilters.All=O.extend({createFilters:function(){
-O.prototype.createFilters.call(this);
-this.filters.mf_all={text:"{$all_label} ("+tc+")",props:{media_folder:""},priority:60};
-this.filters.mf_none={text:"{$none_label}",props:{media_folder:"none"},priority:61};
-for(var i=0;i<f.length;i++)this.filters["mf_"+f[i].id]={text:f[i].text+" ("+f[i].count+")",props:{media_folder:f[i].id},priority:62+i};
-}});
-function inject(){
-if(document.getElementById("wpsk-uf-sel"))return;
-var b=document.querySelector(".media-toolbar-secondary");if(!b)return;
-var w=document.createElement("div");w.style.cssText="display:inline-flex;align-items:center;gap:6px;margin-inline-start:12px";
-var l=document.createElement("label");l.style.cssText="font-weight:600;font-size:13px;white-space:nowrap";l.textContent="{$upl_label}";w.appendChild(l);
-var s=document.createElement("select");s.id="wpsk-uf-sel";s.style.cssText="min-width:140px";
-var o0=document.createElement("option");o0.value="0";o0.textContent="{$none_opt}";s.appendChild(o0);
-for(var i=0;i<f.length;i++){var o=document.createElement("option");o.value=f[i].id;o.textContent=f[i].text;if(f[i].id===uf)o.selected=true;s.appendChild(o);}
-s.addEventListener("change",function(){uf=parseInt(this.value)||0;var fd=new FormData();fd.append("action","wpsk_set_upload_folder");fd.append("nonce",n);fd.append("folder_id",uf);fetch(ajaxurl,{method:"POST",body:fd});});
-w.appendChild(s);b.appendChild(w);}
-var _B=wp.media.view.AttachmentsBrowser;
-wp.media.view.AttachmentsBrowser=_B.extend({createToolbar:function(){_B.prototype.createToolbar.call(this);setTimeout(inject,150);}});
-setTimeout(inject,500);
-})();
-JS;
-
-		wp_add_inline_script( 'media-views', $js );
+		return $depth;
 	}
 
-	private function enqueue_list_js(): void {
-		$nonce = esc_js( wp_create_nonce( 'wpsk_media_folder' ) );
-		$js = <<<JS
-document.addEventListener("DOMContentLoaded",function(){
-var n="{$nonce}";
-var fs=document.getElementById("wpsk-folder-filter");
-if(fs)fs.addEventListener("change",function(){var u=new URL(location.href);if(this.value)u.searchParams.set("media_folder",this.value);else u.searchParams.delete("media_folder");u.searchParams.delete("paged");location.href=u.toString();});
-document.addEventListener("click",function(e){var t=e.target.closest(".wpsk-qf-toggle");if(!t)return;e.preventDefault();var d=t.nextElementSibling;d.style.display=d.style.display==="none"?"inline":"none";});
-document.addEventListener("change",function(e){if(!e.target.classList.contains("wpsk-qf-sel"))return;var s=e.target,ok=s.nextElementSibling;
-var fd=new FormData();fd.append("action","wpsk_assign_folder");fd.append("nonce",n);fd.append("attachment_id",s.dataset.att);fd.append("folder_id",s.value);
-fetch(ajaxurl,{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){if(d.success){ok.style.display="inline";setTimeout(function(){ok.style.display="none";},2000);}});});
-});
-JS;
-		wp_add_inline_script( 'jquery', $js );
+	/* ── Folder column ──────────────────────────────────────── */
+
+	public function add_folder_column( $columns ) {
+		$columns['media_folder'] = __( 'Folder', 'wpsk-media-organizer' );
+		return $columns;
 	}
 
-	public function grid_filter( array $query ): array {
-		$folder = sanitize_text_field( $_REQUEST['query']['media_folder'] ?? '' );
-		if ( '' === $folder ) { return $query; }
-		if ( 'none' === $folder ) {
-			$query['tax_query'] = [ [ 'taxonomy' => 'media_folder', 'operator' => 'NOT EXISTS' ] ];
+	public function render_folder_column( $column_name, $post_id ): void {
+		if ( 'media_folder' !== $column_name ) return;
+
+		$terms = wp_get_post_terms( $post_id, 'media_folder' );
+		if ( empty( $terms ) || is_wp_error( $terms ) ) {
+			echo '<span style="color:#999">' . esc_html__( 'Uncategorized', 'wpsk-media-organizer' ) . '</span>';
+			return;
+		}
+
+		echo esc_html( implode( ', ', wp_list_pluck( $terms, 'name' ) ) );
+	}
+
+	/* ── Quick-assign on attachment edit ─────────────────────── */
+
+	public function render_quick_assign(): void {
+		global $post;
+		if ( ! $post || 'attachment' !== $post->post_type ) return;
+
+		$folders      = $this->get_folders();
+		$current      = wp_get_post_terms( $post->ID, 'media_folder', [ 'fields' => 'ids' ] );
+		$current_id   = ! empty( $current ) && ! is_wp_error( $current ) ? $current[0] : 0;
+		$nonce        = wp_create_nonce( 'wpsk_assign_folder' );
+
+		echo '<div class="misc-pub-section">';
+		echo '<label><strong>' . esc_html__( 'Folder:', 'wpsk-media-organizer' ) . '</strong></label> ';
+		echo '<select id="wpsk-quick-folder" style="max-width:160px">';
+		echo '<option value="0">' . esc_html__( 'None', 'wpsk-media-organizer' ) . '</option>';
+		foreach ( $folders as $f ) {
+			$indent = str_repeat( '—', $this->get_term_depth( $f ) );
+			echo '<option value="' . esc_attr( $f->term_id ) . '"' . selected( $current_id, $f->term_id, false ) . '>'
+				. esc_html( $indent . ' ' . $f->name ) . '</option>';
+		}
+		echo '</select>';
+		echo ' <span id="wpsk-folder-saved" style="color:green;display:none">✓</span>';
+
+		// Inline JS for quick assign.
+		echo '<script>(function(){var s=document.getElementById("wpsk-quick-folder");'
+			. 'var o=document.getElementById("wpsk-folder-saved");'
+			. 's.addEventListener("change",function(){'
+			. 'var fd=new FormData();fd.append("action","wpsk_assign_folder");'
+			. 'fd.append("_wpnonce","' . esc_js( $nonce ) . '");'
+			. 'fd.append("post_id",' . (int) $post->ID . ');'
+			. 'fd.append("folder_id",this.value);'
+			. 'fetch(ajaxurl,{method:"POST",body:fd}).then(function(r){return r.json();}).then(function(d){'
+			. 'if(d.success){o.style.display="inline";setTimeout(function(){o.style.display="none";},2000);}'
+			. '});});})();</script>';
+		echo '</div>';
+	}
+
+	/* ── AJAX handlers ──────────────────────────────────────── */
+
+	public function ajax_assign_folder(): void {
+		check_ajax_referer( 'wpsk_assign_folder' );
+		if ( ! current_user_can( 'upload_files' ) ) {
+			wp_send_json_error( 'Unauthorized' );
+		}
+
+		$post_id   = absint( $_POST['post_id'] ?? 0 );
+		$folder_id = absint( $_POST['folder_id'] ?? 0 );
+
+		if ( ! $post_id ) {
+			wp_send_json_error( 'Invalid post ID' );
+		}
+
+		if ( $folder_id ) {
+			wp_set_post_terms( $post_id, [ $folder_id ], 'media_folder' );
 		} else {
-			$query['tax_query'] = [ [ 'taxonomy' => 'media_folder', 'field' => 'term_id', 'terms' => absint( $folder ) ] ];
+			wp_set_post_terms( $post_id, [], 'media_folder' );
 		}
-		return $query;
+
+		wp_send_json_success();
 	}
 
-	/* ── Bulk actions ────────────────────────────────────────── */
+	public function ajax_create_folder(): void {
+		check_ajax_referer( 'wpsk_create_folder' );
+		if ( ! current_user_can( 'upload_files' ) ) {
+			wp_send_json_error( 'Unauthorized' );
+		}
 
-	public function register_bulk_actions( array $actions ): array {
-		foreach ( $this->get_folders() as $t ) {
-			$actions[ 'wpsk_move_' . $t->term_id ] = sprintf( __( 'Move to: %s', 'wpsk-media-organizer' ), $t->name );
+		$name   = sanitize_text_field( $_POST['name'] ?? '' );
+		$parent = absint( $_POST['parent'] ?? 0 );
+
+		if ( empty( $name ) ) {
+			wp_send_json_error( __( 'Folder name is required.', 'wpsk-media-organizer' ) );
 		}
-		$actions['wpsk_move_0'] = __( 'Remove from folder', 'wpsk-media-organizer' );
-		if ( '1' === $this->get_option( 'bulk_download' ) ) {
-			$actions['wpsk_download'] = __( 'Download as ZIP', 'wpsk-media-organizer' );
+
+		$result = wp_insert_term( $name, 'media_folder', [ 'parent' => $parent ] );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( $result->get_error_message() );
 		}
-		return $actions;
+
+		wp_send_json_success( [
+			'term_id' => $result['term_id'],
+			'name'    => $name,
+		] );
 	}
 
-	public function handle_bulk_actions( string $url, string $action, array $ids ): string {
-		if ( str_starts_with( $action, 'wpsk_move_' ) ) {
-			$fid = absint( str_replace( 'wpsk_move_', '', $action ) );
-			foreach ( $ids as $id ) {
-				wp_set_object_terms( (int) $id, $fid > 0 ? [ $fid ] : [], 'media_folder' );
-			}
-			return add_query_arg( 'wpsk_moved', count( $ids ), $url );
+	public function ajax_delete_folder(): void {
+		check_ajax_referer( 'wpsk_delete_folder' );
+		if ( ! current_user_can( 'upload_files' ) ) {
+			wp_send_json_error( 'Unauthorized' );
 		}
-		if ( 'wpsk_download' === $action && ! empty( $ids ) && class_exists( 'ZipArchive' ) ) {
-			$tmp = wp_tempnam( 'wpsk-dl' );
-			$zip = new \ZipArchive();
-			if ( true === $zip->open( $tmp, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) ) {
-				foreach ( $ids as $id ) {
-					$path = get_attached_file( (int) $id );
-					if ( $path && file_exists( $path ) ) { $zip->addFile( $path, basename( $path ) ); }
+
+		$term_id = absint( $_POST['term_id'] ?? 0 );
+		if ( ! $term_id ) {
+			wp_send_json_error( 'Invalid folder ID' );
+		}
+
+		// Remove folder assignment from all attachments first.
+		$atts = get_posts( [
+			'post_type'      => 'attachment',
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+			'tax_query'      => [
+				[ 'taxonomy' => 'media_folder', 'terms' => $term_id, 'field' => 'term_id' ],
+			],
+		] );
+		foreach ( $atts as $att_id ) {
+			wp_remove_object_terms( $att_id, $term_id, 'media_folder' );
+		}
+
+		$result = wp_delete_term( $term_id, 'media_folder' );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( $result->get_error_message() );
+		}
+
+		wp_send_json_success();
+	}
+
+	public function ajax_rename_folder(): void {
+		check_ajax_referer( 'wpsk_rename_folder' );
+		if ( ! current_user_can( 'upload_files' ) ) {
+			wp_send_json_error( 'Unauthorized' );
+		}
+
+		$term_id = absint( $_POST['term_id'] ?? 0 );
+		$name    = sanitize_text_field( $_POST['name'] ?? '' );
+
+		if ( ! $term_id || empty( $name ) ) {
+			wp_send_json_error( 'Invalid input' );
+		}
+
+		$result = wp_update_term( $term_id, 'media_folder', [ 'name' => $name ] );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( $result->get_error_message() );
+		}
+
+		wp_send_json_success();
+	}
+
+	/* ── Auto-assign ────────────────────────────────────────── */
+
+	public function auto_assign( int $post_id ): void {
+		$default = get_user_meta( get_current_user_id(), 'wpsk_default_folder', true );
+		if ( $default ) {
+			wp_set_post_terms( $post_id, [ (int) $default ], 'media_folder' );
+		}
+	}
+
+	/* ── Sidebar panel (media library) ──────────────────────── */
+
+	public function render_sidebar_panel(): void {
+		$folders = $this->get_folders();
+		$nonce_create = wp_create_nonce( 'wpsk_create_folder' );
+		$nonce_delete = wp_create_nonce( 'wpsk_delete_folder' );
+		$nonce_rename = wp_create_nonce( 'wpsk_rename_folder' );
+
+		?>
+		<script>
+		(function(){
+			// Add a "Manage Folders" button to the media toolbar.
+			var toolbar = document.querySelector('.media-toolbar');
+			if (!toolbar) return;
+
+			var btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = 'button';
+			btn.textContent = '<?php echo esc_js( __( '📁 Manage Folders', 'wpsk-media-organizer' ) ); ?>';
+			btn.style.marginLeft = '8px';
+			toolbar.appendChild(btn);
+
+			btn.addEventListener('click', function() {
+				var dialog = document.getElementById('wpsk-folder-dialog');
+				if (dialog) {
+					dialog.style.display = dialog.style.display === 'none' ? 'block' : 'none';
 				}
-				$zip->close();
-				header( 'Content-Type: application/zip' );
-				header( 'Content-Disposition: attachment; filename="media-' . gmdate( 'Y-m-d-His' ) . '.zip"' );
-				header( 'Content-Length: ' . filesize( $tmp ) );
-				readfile( $tmp );
-				@unlink( $tmp );
-				exit;
-			}
+			});
+		})();
+		</script>
+		<div id="wpsk-folder-dialog" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid #ccc;padding:20px;border-radius:8px;z-index:999999;min-width:300px;box-shadow:0 4px 20px rgba(0,0,0,.2)">
+			<h3 style="margin-top:0"><?php esc_html_e( 'Manage Folders', 'wpsk-media-organizer' ); ?></h3>
+			<div style="margin-bottom:12px">
+				<input type="text" id="wpsk-new-folder-name" placeholder="<?php esc_attr_e( 'New folder name', 'wpsk-media-organizer' ); ?>" style="width:200px" />
+				<button type="button" class="button button-primary" onclick="wpskCreateFolder()"><?php esc_html_e( 'Create', 'wpsk-media-organizer' ); ?></button>
+			</div>
+			<ul id="wpsk-folder-list" style="max-height:300px;overflow-y:auto">
+				<?php foreach ( $folders as $f ) :
+					$indent = str_repeat( '&nbsp;&nbsp;', $this->get_term_depth( $f ) );
+					$count  = $this->get_recursive_count( $f->term_id );
+				?>
+				<li data-id="<?php echo esc_attr( $f->term_id ); ?>" style="padding:4px 0;border-bottom:1px solid #eee">
+					<?php echo $indent; ?>
+					<span class="wpsk-folder-name"><?php echo esc_html( $f->name ); ?></span>
+					<small style="color:#999">(<?php echo esc_html( $count ); ?>)</small>
+					<button type="button" class="button-link" onclick="wpskDeleteFolder(<?php echo esc_attr( $f->term_id ); ?>)" style="color:#b32d2e;margin-left:8px"><?php esc_html_e( 'Delete', 'wpsk-media-organizer' ); ?></button>
+				</li>
+				<?php endforeach; ?>
+			</ul>
+			<button type="button" class="button" onclick="document.getElementById('wpsk-folder-dialog').style.display='none'" style="margin-top:12px"><?php esc_html_e( 'Close', 'wpsk-media-organizer' ); ?></button>
+		</div>
+		<script>
+		function wpskCreateFolder() {
+			var name = document.getElementById('wpsk-new-folder-name').value.trim();
+			if (!name) return;
+			var fd = new FormData();
+			fd.append('action', 'wpsk_create_folder');
+			fd.append('_wpnonce', '<?php echo esc_js( $nonce_create ); ?>');
+			fd.append('name', name);
+			fetch(ajaxurl, {method:'POST', body:fd}).then(function(r){return r.json();}).then(function(d){
+				if (d.success) { location.reload(); } else { alert(d.data); }
+			});
 		}
-		return $url;
-	}
-
-	public function bulk_notice(): void {
-		if ( empty( $_GET['wpsk_moved'] ) ) { return; }
-		printf(
-			'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
-			sprintf( esc_html__( '%d files moved successfully.', 'wpsk-media-organizer' ), (int) $_GET['wpsk_moved'] )
-		);
-	}
-
-	/* ── Upload page selector ────────────────────────────────── */
-
-	public function upload_folder_selector(): void {
-		if ( ! current_user_can( 'upload_files' ) ) { return; }
-		$terms = $this->get_folders();
-		if ( empty( $terms ) ) { return; }
-		$cur   = (int) get_user_meta( get_current_user_id(), '_wpsk_upload_folder', true );
-		$nonce = wp_create_nonce( 'wpsk_media_folder' );
-
-		echo '<div style="margin:16px 0;display:flex;align-items:center;gap:8px">';
-		echo '<label for="wpsk-uf-new" style="font-weight:600;font-size:14px">' . esc_html__( 'Upload to folder:', 'wpsk-media-organizer' ) . '</label>';
-		echo '<select id="wpsk-uf-new" style="min-width:160px"><option value="0">' . esc_html__( '— None —', 'wpsk-media-organizer' ) . '</option>';
-		foreach ( $terms as $t ) {
-			printf( '<option value="%d"%s>%s</option>', $t->term_id, selected( $t->term_id, $cur, false ), esc_html( $t->name ) );
+		function wpskDeleteFolder(id) {
+			if (!confirm('<?php echo esc_js( __( 'Delete this folder? Media files will not be deleted.', 'wpsk-media-organizer' ) ); ?>')) return;
+			var fd = new FormData();
+			fd.append('action', 'wpsk_delete_folder');
+			fd.append('_wpnonce', '<?php echo esc_js( $nonce_delete ); ?>');
+			fd.append('term_id', id);
+			fetch(ajaxurl, {method:'POST', body:fd}).then(function(r){return r.json();}).then(function(d){
+				if (d.success) { location.reload(); } else { alert(d.data); }
+			});
 		}
-		echo '</select><span id="wpsk-uf-ok" style="display:none;color:#00a32a">✓</span></div>';
-		$n = esc_js( $nonce );
-		echo "<script>(function(){var s=document.getElementById('wpsk-uf-new'),o=document.getElementById('wpsk-uf-ok');if(!s)return;s.addEventListener('change',function(){var fd=new FormData();fd.append('action','wpsk_set_upload_folder');fd.append('nonce','{$n}');fd.append('folder_id',this.value);fetch(ajaxurl,{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){if(d.success){o.style.display='inline';setTimeout(function(){o.style.display='none';},2000);}});});})();</script>";
+		</script>
+		<?php
 	}
 
 	/* ── Helper ──────────────────────────────────────────────── */
 
 	private function get_folders(): array {
 		static $cache = null;
-		if ( null !== $cache ) { return $cache; }
-		$terms = get_terms( [ 'taxonomy' => 'media_folder', 'hide_empty' => false, 'orderby' => 'name' ] );
+		if ( null !== $cache ) return $cache;
+		$terms = get_terms( [
+			'taxonomy'   => 'media_folder',
+			'hide_empty' => false,
+			'orderby'    => 'name',
+		] );
 		$cache = is_wp_error( $terms ) ? [] : $terms;
 		return $cache;
 	}

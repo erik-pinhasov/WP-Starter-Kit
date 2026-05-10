@@ -11,22 +11,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// Guard: multiple standalone plugins each bundle this file at different paths.
+// require_once deduplicates by path, not by class, so without this check
+// the second standalone plugin causes "Cannot declare class WPSK_Core".
+if ( class_exists( 'WPSK_Core' ) ) {
+	return;
+}
+
 /**
- * Class WPSK_Core
- *
  * Singleton that boots the framework, registers modules,
  * and renders the shared admin dashboard.
  */
 final class WPSK_Core {
 
-	/** @var string Framework version. */
 	const VERSION = '1.0.0';
-
-	/** @var string Minimum PHP version. */
 	const MIN_PHP = '7.4';
-
-	/** @var string Minimum WP version. */
-	const MIN_WP = '5.9';
+	const MIN_WP  = '5.9';
 
 	/** @var self|null */
 	private static $instance = null;
@@ -34,18 +34,18 @@ final class WPSK_Core {
 	/** @var WPSK_Module[] Registered modules keyed by ID. */
 	private $modules = [];
 
-	/** @var string Absolute path to the plugin root (with trailing slash). */
+	/** @var string */
 	private $plugin_path = '';
 
-	/** @var string URL to the plugin root (with trailing slash). */
+	/** @var string */
 	private $plugin_url = '';
 
-	/** @var bool Whether running as the suite (true) or a standalone module (false). */
+	/** @var bool */
 	private $is_suite = false;
 
-	/**
-	 * Get the singleton instance.
-	 */
+	/** @var bool Track whether init() has already run. */
+	private $initialized = false;
+
 	public static function instance(): self {
 		if ( null === self::$instance ) {
 			self::$instance = new self();
@@ -56,16 +56,30 @@ final class WPSK_Core {
 	private function __construct() {}
 
 	/**
-	 * Boot the framework.
+	 * Boot the framework. Safe to call multiple times (idempotent after first).
 	 *
 	 * @param string $plugin_file Absolute path to the main plugin file.
 	 * @param bool   $is_suite    True when loaded from the suite plugin.
 	 */
 	public function init( string $plugin_file, bool $is_suite = false ): void {
+		// If suite boots after a standalone already initialized, upgrade to suite mode.
+		if ( $this->initialized ) {
+			if ( $is_suite && ! $this->is_suite ) {
+				$this->is_suite    = true;
+				$this->plugin_path = plugin_dir_path( $plugin_file );
+				$this->plugin_url  = plugin_dir_url( $plugin_file );
+				add_action( 'admin_menu', [ $this, 'register_suite_menu' ] );
+				add_action( 'admin_init', [ $this, 'register_suite_settings' ] );
+			}
+			return;
+		}
+
+		$this->initialized = true;
 		$this->plugin_path = plugin_dir_path( $plugin_file );
 		$this->plugin_url  = plugin_dir_url( $plugin_file );
 		$this->is_suite    = $is_suite;
 
+		// Load dependencies (with class_exists guards in each file).
 		require_once $this->plugin_path . 'core/class-wpsk-i18n.php';
 		require_once $this->plugin_path . 'core/class-wpsk-module.php';
 		require_once $this->plugin_path . 'core/class-wpsk-settings.php';
@@ -76,28 +90,24 @@ final class WPSK_Core {
 			add_action( 'admin_menu', [ $this, 'register_suite_menu' ] );
 			add_action( 'admin_init', [ $this, 'register_suite_settings' ] );
 		}
+
+		// Shared admin CSS for all WPSK pages.
+		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_css' ] );
 	}
 
 	/* ----------------------------------------------------------
 	 * Module registry
 	 * ---------------------------------------------------------- */
 
-	/**
-	 * Register a module.
-	 *
-	 * @return bool False if the module ID is already active (conflict).
-	 */
 	public function register_module( WPSK_Module $module ): bool {
 		$id = $module->get_id();
 
-		// Conflict guard — same module already running.
 		if ( isset( $this->modules[ $id ] ) ) {
 			add_action( 'admin_notices', function () use ( $module ) {
 				printf(
 					'<div class="notice notice-warning is-dismissible"><p>%s</p></div>',
 					sprintf(
-						/* translators: %s: module display name */
-						esc_html__( 'WP Starter Kit: "%s" is already active via the suite plugin. The standalone version has been skipped.', 'wpsk' ),
+						esc_html__( 'WP Starter Kit: "%s" is already active via another plugin. The duplicate has been skipped.', 'wpsk' ),
 						esc_html( $module->get_name() )
 					)
 				);
@@ -107,7 +117,6 @@ final class WPSK_Core {
 
 		$this->modules[ $id ] = $module;
 
-		// Only boot if enabled (suite) or always (standalone).
 		if ( ! $this->is_suite || $this->is_module_enabled( $id ) ) {
 			$module->boot( $this->plugin_path, $this->plugin_url );
 		}
@@ -115,9 +124,6 @@ final class WPSK_Core {
 		return true;
 	}
 
-	/**
-	 * Check if a module is enabled in suite mode.
-	 */
 	public function is_module_enabled( string $id ): bool {
 		if ( ! $this->is_suite ) {
 			return true;
@@ -144,16 +150,51 @@ final class WPSK_Core {
 	}
 
 	/* ----------------------------------------------------------
+	 * Admin CSS (shared across all WPSK settings pages)
+	 * ---------------------------------------------------------- */
+
+	public function enqueue_admin_css( string $hook ): void {
+		// Only load on WPSK pages.
+		$screen = get_current_screen();
+		if ( ! $screen ) {
+			return;
+		}
+		$is_wpsk_page = false;
+		if ( strpos( $screen->id ?? '', 'wpsk' ) !== false ) {
+			$is_wpsk_page = true;
+		}
+		if ( ! $is_wpsk_page ) {
+			return;
+		}
+		wp_add_inline_style( 'wp-admin', $this->get_admin_css() );
+	}
+
+	private function get_admin_css(): string {
+		return '
+			.wpsk-field-description { color: #646970; font-style: italic; margin-top: 4px; }
+			.wpsk-help-box { background: #f0f6fc; border: 1px solid #c3d5e8; border-radius: 4px; padding: 12px 16px; margin: 8px 0 16px; font-size: 13px; line-height: 1.6; }
+			.wpsk-help-box a { font-weight: 500; }
+			.wpsk-help-box code { background: #e2ecf5; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+			.wpsk-importance { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 3px; margin-left: 8px; vertical-align: middle; }
+			.wpsk-importance-high { background: #fce4e4; color: #9b1c1c; }
+			.wpsk-importance-medium { background: #fef3cd; color: #856404; }
+			.wpsk-importance-low { background: #d4edda; color: #155724; }
+			.wpsk-copy-box { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+			.wpsk-copy-box input[type="text"] { flex: 1; font-family: monospace; font-size: 13px; }
+			.wpsk-copy-box button { white-space: nowrap; }
+			.wpsk-setup-banner { background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 12px 16px; margin: 8px 0; }
+			.wpsk-setup-banner a { font-weight: 600; }
+		';
+	}
+
+	/* ----------------------------------------------------------
 	 * Suite admin dashboard
 	 * ---------------------------------------------------------- */
 
-	/**
-	 * Register the top-level suite menu and per-module sub-pages.
-	 */
 	public function register_suite_menu(): void {
 		add_menu_page(
 			__( 'WP Starter Kit', 'wpsk' ),
-			__( 'WP Starter Kit', 'wpsk' ),
+			__( 'Starter Kit', 'wpsk' ),
 			'manage_options',
 			'wpsk-dashboard',
 			[ $this, 'render_dashboard' ],
@@ -161,94 +202,77 @@ final class WPSK_Core {
 			80
 		);
 
-		// Sub-pages for each registered module.
 		foreach ( $this->modules as $module ) {
-			if ( ! $this->is_module_enabled( $module->get_id() ) ) {
-				continue;
-			}
 			add_submenu_page(
 				'wpsk-dashboard',
 				$module->get_name(),
 				$module->get_name(),
 				'manage_options',
 				'wpsk-' . $module->get_id(),
-				function () use ( $module ) {
-					$module->render_settings_page();
-				}
+				[ $module, 'render_settings_page' ]
 			);
 		}
 	}
 
-	/**
-	 * Register the enabled-modules option.
-	 */
 	public function register_suite_settings(): void {
 		register_setting( 'wpsk_dashboard', 'wpsk_enabled_modules', [
 			'type'              => 'array',
 			'sanitize_callback' => function ( $value ) {
 				return is_array( $value ) ? array_map( 'sanitize_key', $value ) : [];
 			},
-			'default'           => [],
 		] );
 	}
 
-	/**
-	 * Render the suite dashboard (module toggles).
-	 */
 	public function render_dashboard(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		// Handle module enable/disable.
+		if ( isset( $_POST['wpsk_dashboard_nonce'] ) && wp_verify_nonce( $_POST['wpsk_dashboard_nonce'], 'wpsk_dashboard' ) ) {
+			$enabled = isset( $_POST['wpsk_enabled_modules'] ) ? array_map( 'sanitize_key', (array) $_POST['wpsk_enabled_modules'] ) : [];
+			update_option( 'wpsk_enabled_modules', $enabled );
+
+			// Redirect to settings page if module was just enabled.
+			if ( ! empty( $_POST['wpsk_just_enabled'] ) ) {
+				$just_enabled = sanitize_key( $_POST['wpsk_just_enabled'] );
+				wp_safe_redirect( admin_url( 'admin.php?page=wpsk-' . $just_enabled . '&wpsk_setup=1' ) );
+				exit;
+			}
+
+			echo '<div class="updated"><p>' . esc_html__( 'Settings saved.', 'wpsk' ) . '</p></div>';
+		}
+
 		$enabled = (array) get_option( 'wpsk_enabled_modules', [] );
-		?>
-		<div class="wrap wpsk-dashboard">
-			<h1><?php esc_html_e( 'WP Starter Kit', 'wpsk' ); ?></h1>
-			<p class="wpsk-dash-subtitle">
-				<?php esc_html_e( 'Enable or disable individual modules. Each module adds a specific feature to your WordPress site.', 'wpsk' ); ?>
-			</p>
 
-			<form method="post" action="options.php">
-				<?php settings_fields( 'wpsk_dashboard' ); ?>
+		echo '<div class="wrap">';
+		echo '<h1>' . esc_html__( 'WP Starter Kit', 'wpsk' ) . '</h1>';
+		echo '<p>' . esc_html__( 'Enable or disable modules below. After enabling, you\'ll be taken to the module\'s settings page.', 'wpsk' ) . '</p>';
+		echo '<form method="post">';
+		wp_nonce_field( 'wpsk_dashboard', 'wpsk_dashboard_nonce' );
+		echo '<table class="wp-list-table widefat fixed striped">';
+		echo '<thead><tr><th style="width:40px">' . esc_html__( 'On', 'wpsk' ) . '</th><th>' . esc_html__( 'Module', 'wpsk' ) . '</th><th>' . esc_html__( 'Description', 'wpsk' ) . '</th><th style="width:100px">' . esc_html__( 'Settings', 'wpsk' ) . '</th></tr></thead><tbody>';
 
-				<div class="wpsk-modules-grid">
-					<?php foreach ( $this->modules as $module ) : ?>
-						<div class="wpsk-module-card<?php echo in_array( $module->get_id(), $enabled, true ) ? ' wpsk-active' : ''; ?>">
-							<label class="wpsk-module-toggle">
-								<input
-									type="checkbox"
-									name="wpsk_enabled_modules[]"
-									value="<?php echo esc_attr( $module->get_id() ); ?>"
-									<?php checked( in_array( $module->get_id(), $enabled, true ) ); ?>
-								>
-								<span class="wpsk-toggle-track"><span class="wpsk-toggle-thumb"></span></span>
-							</label>
-							<h3><?php echo esc_html( $module->get_name() ); ?></h3>
-							<p><?php echo esc_html( $module->get_description() ); ?></p>
-							<?php if ( in_array( $module->get_id(), $enabled, true ) ) : ?>
-								<a href="<?php echo esc_url( admin_url( 'admin.php?page=wpsk-' . $module->get_id() ) ); ?>" class="wpsk-module-settings-link">
-									<?php esc_html_e( 'Settings', 'wpsk' ); ?> →
-								</a>
-							<?php endif; ?>
-						</div>
-					<?php endforeach; ?>
-				</div>
+		foreach ( $this->modules as $module ) {
+			$id      = $module->get_id();
+			$checked = in_array( $id, $enabled, true ) ? 'checked' : '';
+			echo '<tr>';
+			echo '<td><input type="checkbox" name="wpsk_enabled_modules[]" value="' . esc_attr( $id ) . '" ' . $checked . ' onchange="if(this.checked){document.querySelector(\'[name=wpsk_just_enabled]\').value=\'' . esc_js( $id ) . '\';}else{document.querySelector(\'[name=wpsk_just_enabled]\').value=\'\';}" /></td>';
+			echo '<td><strong>' . esc_html( $module->get_name() ) . '</strong></td>';
+			echo '<td>' . esc_html( $module->get_description() ) . '</td>';
+			echo '<td>';
+			if ( $checked ) {
+				echo '<a href="' . esc_url( admin_url( 'admin.php?page=wpsk-' . $id ) ) . '">' . esc_html__( 'Configure', 'wpsk' ) . '</a>';
+			} else {
+				echo '<span style="color:#999">' . esc_html__( 'Enable first', 'wpsk' ) . '</span>';
+			}
+			echo '</td>';
+			echo '</tr>';
+		}
 
-				<?php submit_button( __( 'Save Changes', 'wpsk' ) ); ?>
-			</form>
-		</div>
-
-		<style>
-			.wpsk-dash-subtitle { font-size: 14px; color: #646970; margin: 4px 0 20px; }
-			.wpsk-modules-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin: 20px 0; }
-			.wpsk-module-card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; position: relative; transition: border-color .2s; }
-			.wpsk-module-card.wpsk-active { border-color: #2271b1; }
-			.wpsk-module-card h3 { margin: 12px 0 6px; font-size: 15px; }
-			.wpsk-module-card p { color: #646970; font-size: 13px; margin: 0 0 8px; }
-			.wpsk-module-settings-link { font-size: 13px; text-decoration: none; }
-			.wpsk-module-toggle { position: absolute; top: 16px; right: 16px; cursor: pointer; }
-			.wpsk-module-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
-			.wpsk-toggle-track { display: inline-block; width: 36px; height: 20px; background: #ccc; border-radius: 10px; position: relative; transition: background .2s; }
-			.wpsk-toggle-thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: transform .2s; }
-			.wpsk-module-toggle input:checked + .wpsk-toggle-track { background: #2271b1; }
-			.wpsk-module-toggle input:checked + .wpsk-toggle-track .wpsk-toggle-thumb { transform: translateX(16px); }
-		</style>
-		<?php
+		echo '</tbody></table>';
+		echo '<input type="hidden" name="wpsk_just_enabled" value="" />';
+		submit_button();
+		echo '</form></div>';
 	}
 }

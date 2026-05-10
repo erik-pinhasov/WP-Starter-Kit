@@ -1,22 +1,17 @@
 <?php
 /**
- * WPSK Login URL — Custom login page URL.
+ * WPSK Login URL — Hide wp-login.php behind a custom slug.
  *
- * Hides wp-login.php behind a user-chosen slug and redirects
- * direct access attempts to a configurable destination.
- *
- * @package    WPStarterKit
- * @subpackage Modules\LoginURL
- * @since      1.0.0
+ * CRITICAL FIX: handle_request() now runs at `wp_loaded` (not `plugins_loaded`)
+ * so WordPress is fully bootstrapped before we require wp-login.php.
+ * The old code caused "Undefined constant AUTOSAVE_INTERVAL" because
+ * wp-login.php was loaded before wp-settings.php finished defining constants.
  */
 
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
+if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class WPSK_Login_URL extends WPSK_Module {
 
-	/** @var string|null Cached slug value. */
 	private $slug = null;
 
 	public function get_id(): string {
@@ -38,11 +33,12 @@ class WPSK_Login_URL extends WPSK_Module {
 				'label'       => __( 'Login Slug', 'wpsk-login-url' ),
 				'type'        => 'text',
 				'description' => sprintf(
-					__( 'Your custom login URL will be: %s', 'wpsk-login-url' ),
+					__( 'Your custom login URL will be: %s. Leave empty to disable.', 'wpsk-login-url' ),
 					'<code>' . trailingslashit( home_url() ) . '<strong>&lt;slug&gt;</strong></code>'
 				),
 				'default'     => '',
 				'placeholder' => 'my-login',
+				'importance'  => 'high',
 			],
 			[
 				'id'      => 'redirect_to',
@@ -58,134 +54,187 @@ class WPSK_Login_URL extends WPSK_Module {
 		];
 	}
 
+	public function get_help_html(): string {
+		return '<strong>' . esc_html__( 'How it works:', 'wpsk-login-url' ) . '</strong> '
+			. esc_html__( 'Choose a secret slug (e.g. "my-login"). Your login page will only be accessible at that URL. Anyone trying wp-login.php directly will be redirected. Make sure to bookmark your new login URL!', 'wpsk-login-url' )
+			. '<br><br><strong>⚠️ ' . esc_html__( 'Important:', 'wpsk-login-url' ) . '</strong> '
+			. esc_html__( 'If you forget your custom slug, you can deactivate this plugin via FTP by renaming the plugin folder, then access wp-login.php normally.', 'wpsk-login-url' );
+	}
+
 	protected function init(): void {
 		$this->slug = $this->get_slug();
 		if ( '' === $this->slug ) {
 			return;
 		}
+
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			return;
 		}
 
-		add_action( 'plugins_loaded', [ $this, 'handle_request' ], 9999 );
-		add_filter( 'login_url', [ $this, 'filter_login_url' ], 10, 3 );
-		add_filter( 'site_url', [ $this, 'filter_site_url' ], 10, 4 );
-		add_filter( 'network_site_url', [ $this, 'filter_network_url' ], 10, 3 );
-		add_filter( 'wp_redirect', [ $this, 'filter_redirect' ], 10, 2 );
-		add_filter( 'register_url', [ $this, 'filter_generic_url' ] );
-		add_filter( 'lostpassword_url', [ $this, 'filter_lostpassword_url' ], 10, 2 );
-		add_filter( 'logout_url', [ $this, 'filter_logout_url' ], 10, 2 );
+		// FIX: Use wp_loaded (not plugins_loaded) so WordPress is fully bootstrapped
+		// before we attempt to require wp-login.php. This prevents the
+		// "Undefined constant AUTOSAVE_INTERVAL" fatal error.
+		add_action( 'wp_loaded', [ $this, 'handle_request' ], 9999 );
+
+		// URL filters — these are safe at any hook.
+		add_filter( 'login_url',         [ $this, 'filter_login_url' ], 10, 3 );
+		add_filter( 'site_url',          [ $this, 'filter_site_url' ], 10, 4 );
+		add_filter( 'network_site_url',  [ $this, 'filter_network_url' ], 10, 3 );
+		add_filter( 'wp_redirect',       [ $this, 'filter_redirect' ], 10, 2 );
+		add_filter( 'register_url',      [ $this, 'filter_generic_url' ] );
+		add_filter( 'lostpassword_url',  [ $this, 'filter_lostpassword_url' ], 10, 2 );
+		add_filter( 'logout_url',        [ $this, 'filter_logout_url' ], 10, 2 );
 	}
 
 	/* ── Request handler ────────────────────────────────────── */
 
 	public function handle_request(): void {
-		$path = trim( wp_parse_url( $_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH ), '/' );
+		$request_uri = $_SERVER['REQUEST_URI'] ?? '';
+		$path = trim( wp_parse_url( $request_uri, PHP_URL_PATH ) ?? '', '/' );
 
-		// Custom slug → load wp-login.php
-		if ( $path === $this->slug ) {
-			define( 'WPSK_LOGIN_SLUG_ACTIVE', true );
+		// Custom slug → load wp-login.php with full WordPress environment.
+		if ( $path === $this->slug || strpos( $path, $this->slug . '/' ) === 0 ) {
+			// Mark that we're handling login through the custom slug.
+			if ( ! defined( 'WPSK_LOGIN_SLUG_ACTIVE' ) ) {
+				define( 'WPSK_LOGIN_SLUG_ACTIVE', true );
+			}
+
+			// Ensure all constants wp-login.php needs are defined.
+			if ( ! defined( 'AUTOSAVE_INTERVAL' ) ) {
+				define( 'AUTOSAVE_INTERVAL', 60 );
+			}
+
+			// Set up globals that wp-login.php expects.
 			global $error, $interim_login, $action, $user_login;
+
+			// Parse the action from query string.
+			$action = isset( $_REQUEST['action'] ) ? sanitize_key( $_REQUEST['action'] ) : 'login';
+
 			@require_once ABSPATH . 'wp-login.php';
 			exit;
 		}
 
-		// Block direct wp-login.php access
-		if ( 'wp-login.php' === basename( $path ) && ! $this->is_allowed_action() ) {
-			$this->redirect_blocked();
+		// Block direct wp-login.php access (except for POST actions from our slug
+		// and AJAX/CLI requests).
+		if ( $this->is_login_request( $path ) ) {
+			// Allow POST requests that come from a legitimate login session
+			// (e.g. form submissions, postpass, etc.)
+			if ( 'POST' === ( $_SERVER['REQUEST_METHOD'] ?? '' ) && ! empty( $_POST ) ) {
+				// Check if this POST was initiated from our custom slug
+				$referer = wp_get_referer();
+				if ( $referer && strpos( $referer, '/' . $this->slug ) !== false ) {
+					// This is a legitimate form submission from our custom URL.
+					if ( ! defined( 'WPSK_LOGIN_SLUG_ACTIVE' ) ) {
+						define( 'WPSK_LOGIN_SLUG_ACTIVE', true );
+					}
+					return; // Let WordPress handle it normally.
+				}
+			}
+
+			$this->block_request();
 		}
+	}
+
+	/**
+	 * Check if the current request is for wp-login.php.
+	 */
+	private function is_login_request( string $path ): bool {
+		// Direct file access.
+		if ( 'wp-login.php' === basename( $path ) ) {
+			return true;
+		}
+		// Check SCRIPT_FILENAME for nginx/litespeed setups.
+		$script = $_SERVER['SCRIPT_FILENAME'] ?? '';
+		if ( $script && 'wp-login.php' === basename( $script ) ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Redirect blocked login attempts.
+	 */
+	private function block_request(): void {
+		$redirect_to = $this->get_option( 'redirect_to' );
+
+		if ( 'home' === $redirect_to ) {
+			wp_safe_redirect( home_url( '/' ), 302 );
+			exit;
+		}
+
+		// Default: 404.
+		global $wp_query;
+		if ( $wp_query ) {
+			$wp_query->set_404();
+			status_header( 404 );
+			nocache_headers();
+			$template = get_404_template();
+			if ( $template ) {
+				include $template;
+			}
+			exit;
+		}
+
+		// Fallback if $wp_query isn't available yet.
+		wp_safe_redirect( home_url( '/' ), 302 );
+		exit;
 	}
 
 	/* ── URL filters ────────────────────────────────────────── */
 
-	public function filter_login_url( $url, $redirect, $force_reauth ) {
-		return $this->rewrite( $url );
-	}
-	public function filter_site_url( $url, $path = '', $scheme = null, $blog_id = null ) {
-		return $this->rewrite( $url );
-	}
-	public function filter_network_url( $url, $path = '', $scheme = null ) {
-		return $this->rewrite( $url );
-	}
-	public function filter_redirect( $location, $status ) {
-		return $this->rewrite( $location );
-	}
-	public function filter_generic_url( $url ) {
-		return $this->rewrite( $url );
-	}
-	public function filter_lostpassword_url( $url, $redirect ) {
-		return $this->rewrite( $url );
-	}
-	public function filter_logout_url( $url, $redirect ) {
-		return $this->rewrite( $url );
-	}
-
-	/* ── Settings page with current URL display ─────────────── */
-
-	public function render_settings_page(): void {
-		$page = 'wpsk_' . $this->get_id();
-		$slug = $this->get_slug();
-		?>
-		<div class="wrap">
-			<h1><?php echo esc_html( $this->get_name() ); ?></h1>
-			<p class="description"><?php echo esc_html( $this->get_description() ); ?></p>
-
-			<?php if ( '' !== $slug ) : ?>
-			<div class="notice notice-success inline" style="margin:15px 0">
-				<p>
-					<strong><?php esc_html_e( 'Your login URL:', 'wpsk-login-url' ); ?></strong>
-					<code><a href="<?php echo esc_url( home_url( $slug ) ); ?>"><?php echo esc_html( home_url( $slug ) ); ?></a></code>
-				</p>
-			</div>
-			<?php endif; ?>
-
-			<form method="post" action="options.php">
-				<?php settings_fields( $page ); do_settings_sections( $page ); submit_button(); ?>
-			</form>
-
-			<hr>
-			<h2><?php esc_html_e( 'Recovery', 'wpsk-login-url' ); ?></h2>
-			<p class="description">
-				<?php esc_html_e( 'If you forget your custom login URL, reset via WP-CLI or database:', 'wpsk-login-url' ); ?>
-				<br><code>wp option delete wpsk_login-url_slug</code>
-			</p>
-		</div>
-		<?php
-	}
-
-	/* ── Helpers ─────────────────────────────────────────────── */
-
 	private function get_slug(): string {
-		if ( null !== $this->slug ) {
-			return $this->slug;
-		}
-		return sanitize_title( $this->get_option( 'slug' ) );
+		$slug = $this->get_option( 'slug' );
+		return sanitize_title( (string) $slug );
 	}
 
-	private function is_allowed_action(): bool {
-		if ( defined( 'WPSK_LOGIN_SLUG_ACTIVE' ) ) {
-			return true;
-		}
-		$action = $_GET['action'] ?? $_POST['action'] ?? '';
-		return in_array( $action, [ 'postpass', 'rp', 'resetpass', 'confirmaction' ], true );
+	private function new_login_url( string $scheme = '' ): string {
+		$url = home_url( '/' . $this->slug . '/', $scheme );
+		return $url;
 	}
 
-	private function rewrite( string $url ): string {
-		if ( '' !== $this->slug && false !== strpos( $url, 'wp-login.php' ) ) {
-			$url = str_replace( 'wp-login.php', $this->slug, $url );
+	public function filter_login_url( string $login_url, string $redirect = '', $force_reauth = false ): string {
+		$url = $this->new_login_url();
+		if ( ! empty( $redirect ) ) {
+			$url = add_query_arg( 'redirect_to', urlencode( $redirect ), $url );
+		}
+		if ( $force_reauth ) {
+			$url = add_query_arg( 'reauth', '1', $url );
 		}
 		return $url;
 	}
 
-	private function redirect_blocked(): void {
-		if ( 'home' === $this->get_option( 'redirect_to' ) ) {
-			wp_safe_redirect( home_url( '/' ), 302 );
-			exit;
+	public function filter_site_url( string $url, string $path = '', $scheme = null, $blog_id = null ): string {
+		return $this->replace_login_path( $url );
+	}
+
+	public function filter_network_url( string $url, string $path = '', $scheme = null ): string {
+		return $this->replace_login_path( $url );
+	}
+
+	public function filter_redirect( string $location, int $status = 302 ): string {
+		return $this->replace_login_path( $location );
+	}
+
+	public function filter_generic_url( string $url ): string {
+		return $this->replace_login_path( $url );
+	}
+
+	public function filter_lostpassword_url( string $url, string $redirect = '' ): string {
+		$url = $this->replace_login_path( $url );
+		return $url;
+	}
+
+	public function filter_logout_url( string $url, string $redirect = '' ): string {
+		return $this->replace_login_path( $url );
+	}
+
+	/**
+	 * Replace wp-login.php in a URL with the custom slug.
+	 */
+	private function replace_login_path( string $url ): string {
+		if ( strpos( (string) $url, 'wp-login.php' ) !== false ) {
+			$url = str_replace( 'wp-login.php', $this->slug . '/', (string) $url );
 		}
-		status_header( 404 );
-		nocache_headers();
-		$tpl = get_404_template();
-		if ( $tpl ) { include $tpl; } else { wp_die( 'Not Found', 404, [ 'response' => 404 ] ); }
-		exit;
+		return $url;
 	}
 }
